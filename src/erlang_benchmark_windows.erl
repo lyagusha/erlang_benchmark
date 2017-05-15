@@ -54,18 +54,23 @@ init([]) ->
     		wxCheckBox:connect(Item, command_checkbox_clicked)
     	end,
     wx:foreach(Fun, CheckBoxes),
-    {ok, [{tests_list, []}, {all_tests, ZipList}, {gauge, Gauge}, {main_form, MainForm}, {operations, Operations}]}.
+    State = [{tests_list, []}, {all_tests, ZipList}, {gauge, Gauge}, {main_form, MainForm}, {operations, Operations}],
+    {ok, State}.
 
 handle_call(get_state, _From, State) ->
     {reply, State, State};
 
 handle_call(_, _From, State) ->
     {reply, undefined, State}.
-
+%==============================================================================
 handle_cast({show_result, Res}, State) ->
     NumbersOfString = length(proplists:get_keys(Res)),
     Wx = wx:new(),
     ResForm = wxFrame:new(Wx, 0, "Results", [{size, {510,40+NumbersOfString*25}}]),
+
+%_Panel = wxPanel:new(ResForm, []),
+A= application:get_env(erlang_benchmark, result_file),
+io:format("~n 73 ~p",[A]),
     Grid = wxGrid:new(ResForm, 1, []),
     wxGrid:createGrid(Grid, NumbersOfString, 3),
     Strings = [{Group, Test, Time}||{{Group, Test}, Time} <- Res],
@@ -90,7 +95,7 @@ handle_cast({show_result, Res}, State) ->
     wxFrame:hide(MainForm),
     wxFrame:connect(ResForm, close_window),
     {noreply, [{res_form, ResForm}|State]};
-
+%==============================================================================
 handle_cast(set_gauge_value, State) ->
     Gauge = proplists:get_value(gauge, State),
     V0 = wxGauge:getValue(Gauge),
@@ -130,7 +135,7 @@ handle_info({wx, _, Object, _, {wxClose,close_window}}, State) ->
     case Object of    
         ResForm ->
             wxFrame:hide(ResForm),
-            % добавить сюда остановку приложения
+            init:stop(),
             {noreply, State};
         _ ->
             {noreply, State}

@@ -3,5 +3,5 @@
 
 start() ->
     sync:go(),
-%    application:start(erlang_benchmark).
+    application:start(erlang_benchmark),
     erlang_benchmark_app:start(1,2).

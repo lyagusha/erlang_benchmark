@@ -1,1 +1,1 @@
-erl -pa $PWD/ebin  -s erlang_benchmark
+erl -pa $PWD/ebin/ -s erlang_benchmark -sys app
