@@ -27,8 +27,8 @@ init([]) ->
     Operations = 10, %%количество проходов нужно получать от пользователя
 %%Main form
 % preparation
-    Path = <<"src/tests/">>,
-    {ok, Tests} = file:list_dir(Path),
+    {ok, Modules} = application:get_key(erlang_benchmark, modules),
+    Tests = is_test(Modules),
     GetNames = (fun(Name) ->
         BaseName = filename:basename(Name, ".erl"), 
         BaseNameBin = list_to_binary(BaseName),
@@ -156,3 +156,57 @@ make_tests_list(CheckBox, 1, TestsList) ->
 make_tests_list(CheckBox, 0, TestsList) ->
     NewTestsList = TestsList -- [CheckBox],
     self()!{set_state, {tests_list, NewTestsList}}.
+%==============================================================================
+is_test(Modules) ->
+    is_test(Modules, []).
+
+is_test([Module|Modules], Res)->
+    NewRes = case re:run(atom_to_list(Module), "test$", [global]) of
+        nomatch -> Res;
+        {match, _} -> [Module|Res]
+        end,
+    is_test(Modules, NewRes);
+
+is_test([], Res) ->
+    Res.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
