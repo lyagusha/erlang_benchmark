@@ -81,7 +81,7 @@ handle_cast(Msg, State) ->
     {noreply, State}.
 
 handle_info(_Info, State) ->
-    io:format("~ntester 62~n"),
+    io:format("~ntester 84~n"),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -121,7 +121,9 @@ make_result([Test|Tests], State, Res) ->
     make_result(Tests, State, [Average|Res]);
 
 make_result([], _State, Res) ->
-    lists:flatten(Res).
+    NewRes = lists:flatten(Res),
+    make_result_file(NewRes),
+    NewRes.
 %
 average_result([Res|ListOfRes]) ->
     average_result(ListOfRes, Res).
@@ -155,3 +157,23 @@ sum_pl([Key|Keys], Res, Sum) ->
 
 sum_pl([], _Res, Sum) ->
     Sum.
+
+make_result_file(Res) ->
+    {ok, Store} = application:get_env(erlang_benchmark, store_results),
+    case Store of 
+        false -> 
+            ok;
+        true ->
+            DateTime = erlang:localtime(),
+            {{Y,M,D},{H,Mi,S}} = DateTime,
+            DateTimeString = lists:flatten(io_lib:format("_~p.~p.~p_~p:~p:~p", [Y,M,D,H,Mi,S])),
+            {ok, FileAtom} = application:get_env(erlang_benchmark, result_file),
+            {ok, DirAtom} = application:get_env(erlang_benchmark, result_dir),
+            File = atom_to_list(FileAtom),
+            Dir = atom_to_list(DirAtom),
+            _ = file:make_dir(Dir),
+            FileName = Dir++"/"++File++DateTimeString,
+            {ok, F} = file:open(FileName, write),
+            io:format(F, "~p~n", [{DateTime, Res}]),
+            file:close(F)
+    end.
