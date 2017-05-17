@@ -24,7 +24,7 @@ start() ->
 % gen_server
 %==============================================================================
 init([]) ->
-    Operations = 10, %%количество проходов нужно получать от пользователя
+    {ok, Operations} = application:get_env(erlang_benchmark, tests_number),
 %%Main form
 % preparation
     {ok, Modules} = application:get_key(erlang_benchmark, modules),
@@ -49,6 +49,7 @@ init([]) ->
         [wxCheckBox:new(MainForm, N, Name, [{pos, {10,50+(N-100)*25}}])||{N, Name} <- ZipList],
     wxFrame:show(MainForm),
     ok = wxFrame:connect(MainForm, command_button_clicked),
+    ok = wxFrame:connect(MainForm, close_window),
     Fun =
 	    fun(Item) ->
     		wxCheckBox:connect(Item, command_checkbox_clicked)
@@ -131,15 +132,9 @@ handle_info({set_state, {Key, Value}}, State) ->
     {noreply, NewState};
 
 handle_info({wx, _, Object, _, {wxClose,close_window}}, State) ->
-    ResForm = proplists:get_value(res_form, State),
-    case Object of    
-        ResForm ->
-            wxFrame:hide(ResForm),
-            init:stop(),
-            {noreply, State};
-        _ ->
-            {noreply, State}
-    end;
+    wxFrame:hide(Object),
+    init:stop(),
+    {noreply, State};
 
 handle_info(_, State) ->
     {noreply, State}.
