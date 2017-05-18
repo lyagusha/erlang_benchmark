@@ -2,7 +2,7 @@
 
 -behaviour(gen_server).
 
--export([start/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -11,19 +11,23 @@
          handle_info/2,
          terminate/2,
          code_change/3,
-         cast/1]).
+         cast/1,
+         call/1]).
 
 -include_lib("wx/include/wx.hrl").
+
+call(Req) ->
+    gen_server:call(windows, Req).
 
 cast(Req) ->
     gen_server:cast(windows, Req).
 
-start() ->
-    _ = gen_server:start({local, windows}, ?MODULE, [], []).
+start_link(State) ->
+    _ = gen_server:start_link({local, windows}, ?MODULE, [State], []).
 %==============================================================================
 % gen_server
 %==============================================================================
-init([]) ->
+init([State0]) ->
     {ok, Operations} = application:get_env(erlang_benchmark, tests_number),
 %%Main form
 % preparation
@@ -38,13 +42,29 @@ init([]) ->
     TestNames = [GetNames(X)|| X <- Tests],
     TestNunbers = lists:seq(100, length(TestNames)+99),
     ZipList = lists:zip(TestNunbers, TestNames),
-    
 % wx
     Wx = wx:new(),
-    MainForm = wxFrame:new(Wx, 0, "Erlang benchmark", [{size, {330,100+25*length(TestNunbers)}}]),   
-    _B1 = wxButton:new(MainForm, 1, [{label,"Test all"}, {pos, {10,10}}, {size, {150,30}}]), 
-    _B2 = wxButton:new(MainForm, 2, [{label,"Test selected"}, {pos, {170,10}}, {size, {150,30}}]), 
-    Gauge = wxGauge:new(MainForm, 3, 100, [{size, {310, 30}}, {pos, {10,60+25*length(TestNunbers)}}, {style, ?wxGA_HORIZONTAL}]),
+    MainForm = wxFrame:new(Wx, 0, "Erlang benchmark", [{size, {330,230+25*length(TestNunbers)}}]),   
+    B1 = wxButton:new(MainForm, 1, [{label,"Test all"}, {pos, {10,10}}, {size, {150,30}}]), 
+    B2 = wxButton:new(MainForm, 2, [{label,"Test selected"}, {pos, {170,10}}, {size, {150,30}}]),
+    DefaultButtonAtom = proplists:get_value(default_button, State0),
+    DefaultButton = case DefaultButtonAtom of
+        all        -> B1;
+        selected   -> B2;
+        _          ->
+            io:format("~nWarning! Invalid default button key",[]),
+            B1
+    end,
+%    wxButton:setDefault(DefaultButton),
+    wxWindow:setFocus(DefaultButton),
+    _ = wxStaticText:new(MainForm, ?wxID_ANY, "Progress", [{pos, {10, 50+25*length(TestNunbers)}}]),
+    Gauge = wxGauge:new(MainForm, 3, 100, [{size, {310, 30}}, {pos, {10,70+25*length(TestNunbers)}}, {style, ?wxGA_HORIZONTAL}]),
+    _ = wxStaticText:new(MainForm, ?wxID_ANY, "CPU", [{pos, {10, 110+25*length(TestNunbers)}}]),
+    CpuGauge =  wxGauge:new(MainForm, 4, 100, [{size, {310, 30}}, {pos, {10,130+25*length(TestNunbers)}}, {style, ?wxGA_HORIZONTAL}]),
+
+    _ = wxStaticText:new(MainForm, ?wxID_ANY, "Erlang usege memory", [{pos, {10, 170+25*length(TestNunbers)}}]),
+    {TotalMemory, _, _} = memsup:get_memory_data(),
+    MemErlUsege =  wxGauge:new(MainForm, 5, erlang:round(TotalMemory/(1024*1024)), [{size, {310, 30}}, {pos, {10, 190+25*length(TestNunbers)}}, {style, ?wxGA_HORIZONTAL}]),
     CheckBoxes =
         [wxCheckBox:new(MainForm, N, Name, [{pos, {10,50+(N-100)*25}}])||{N, Name} <- ZipList],
     wxFrame:show(MainForm),
@@ -55,9 +75,10 @@ init([]) ->
     		wxCheckBox:connect(Item, command_checkbox_clicked)
     	end,
     wx:foreach(Fun, CheckBoxes),
-    State = [{tests_list, []}, {all_tests, ZipList}, {gauge, Gauge}, {main_form, MainForm}, {operations, Operations}],
+    State = [{tests_list, []}, {all_tests, ZipList}, {gauge, Gauge}, {cpu_gauge, CpuGauge}, {memory_gauge, MemErlUsege}, {main_form, MainForm}, {operations, Operations}|State0],
+    erlang_benchmark_monitor:start_link(State),
     {ok, State}.
-
+%==============================================================================
 handle_call(get_state, _From, State) ->
     {reply, State, State};
 
@@ -70,8 +91,6 @@ handle_cast({show_result, Res}, State) ->
     ResForm = wxFrame:new(Wx, 0, "Results", [{size, {510,40+NumbersOfString*25}}]),
 
 %_Panel = wxPanel:new(ResForm, []),
-A= application:get_env(erlang_benchmark, result_file),
-io:format("~n 73 ~p",[A]),
     Grid = wxGrid:new(ResForm, 1, []),
     wxGrid:createGrid(Grid, NumbersOfString, 3),
     Strings = [{Group, Test, Time}||{{Group, Test}, Time} <- Res],
@@ -97,12 +116,25 @@ io:format("~n 73 ~p",[A]),
     wxFrame:connect(ResForm, close_window),
     {noreply, [{res_form, ResForm}|State]};
 %==============================================================================
+%==============================================================================
+%Gauges state
 handle_cast(set_gauge_value, State) ->
     Gauge = proplists:get_value(gauge, State),
     V0 = wxGauge:getValue(Gauge),
     wxGauge:setValue(Gauge, V0+1),
     {noreply, State};
 
+handle_cast({set_cpu_gauge_value, Value}, State) ->
+    Gauge = proplists:get_value(cpu_gauge, State),
+    wxGauge:setValue(Gauge, Value),
+    {noreply, State};
+    
+handle_cast({set_mem_gauge_value, Value}, State) ->
+    %io:format("~n~nwindows:124~n~nErlang memory usage: ~p Mb~n~n",[Value]),
+    Gauge = proplists:get_value(memory_gauge, State),
+    wxGauge:setValue(Gauge, Value),
+    {noreply, State};
+%==============================================================================
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -112,11 +144,11 @@ handle_info({wx, Id, _, _, {_,_,_, Check, _}}, State) ->
     Operations = proplists:get_value(operations, State),
     Gauge = proplists:get_value(gauge, State),
     case {Id, Check} of
-        {1, _} ->   
+        {1,0} ->   
             L = length(AllTests),  
             wxGauge:setRange(Gauge,L*Operations), 
             erlang_benchmark_tester:start(all, AllTests, Operations);
-        {2, _} ->  
+        {2,0} -> 
             L = length(TestsList),  
             wxGauge:setRange(Gauge, L*Operations), 
             erlang_benchmark_tester:start(TestsList, AllTests, Operations);

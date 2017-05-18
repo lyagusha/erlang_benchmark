@@ -3,5 +3,6 @@
 
 start() ->
     sync:go(),
-    application:start(erlang_benchmark),
-    erlang_benchmark_app:start(1,2).
+    ok = application:start(sasl),
+    ok = application:start(os_mon),
+    ok = application:start(erlang_benchmark).

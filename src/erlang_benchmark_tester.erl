@@ -10,7 +10,8 @@
          handle_cast/2,
          handle_info/2,
          terminate/2,
-         code_change/3]).
+         code_change/3,
+         cast/1]).
 
 
 cast(Req) ->
@@ -25,6 +26,7 @@ start(TestsList, AllTests, Operations) ->
 % gen_server
 %==============================================================================
 init([AllTests, Operations]) ->
+%    _ = erlang_benchmark_monitor:start_link(),
     Tests = [Test||{_, Test} <- AllTests],
     cast(start),
     {ok, [{tests, Tests}, {tests_list, Tests}, {operations, Operations}]};
@@ -46,7 +48,6 @@ handle_cast({test_res, {Test, Res}}, State) ->
         true ->
             {noreply, NewState};
         false ->
-            io:format("tester:49 results: ~p~n",[NewResults]),
             cast(start),
             {noreply, NewState}
     end;
@@ -73,8 +74,9 @@ handle_cast(make_result, State) ->
     Tests = proplists:get_value(tests_list, State),
     AverageResult = make_result(Tests, State),
     erlang_benchmark_windows:cast({show_result, AverageResult}),
-    io:format("tester:72 state: ~p~n AverageResult: ~p~n",[State,AverageResult]),
+    io:format("~nAverageResult: ~p~n", [AverageResult]),
     {noreply, State};
+
 
 handle_cast(Msg, State) ->
     io:format("tester:76 Msg: ~p~n",[Msg]),
